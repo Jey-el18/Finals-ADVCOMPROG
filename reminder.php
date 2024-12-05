@@ -15,8 +15,27 @@ $conn = $config->getConnection(); // Get the database connection
 
 $user_id = $_SESSION['user_id']; // Get user id from session
 
+// Check if the form was submitted to update the status
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['schedule_id'], $_POST['status'])) {
+    $schedule_id = intval($_POST['schedule_id']);
+    $status = $_POST['status'];
+
+    $stmt = $conn->prepare("UPDATE schedules SET status = ? WHERE schedule_id = ?");
+    if ($stmt) {
+        $stmt->bind_param("si", $status, $schedule_id);
+        if ($stmt->execute()) {
+            $message = "Status updated successfully!";
+        } else {
+            $message = "Failed to update status.";
+        }
+        $stmt->close();
+    } else {
+        $message = "Failed to prepare the statement.";
+    }
+}
+
 // Fetch user schedules
-$stmt = $conn->prepare("SELECT schedules.schedule_id, medicines.name, schedules.quantity, schedules.pickup_date 
+$stmt = $conn->prepare("SELECT schedules.schedule_id, medicines.name, schedules.quantity, schedules.pickup_date, schedules.status 
                         FROM schedules 
                         JOIN medicines ON schedules.medicine_id = medicines.medicine_id 
                         WHERE schedules.user_id = ?");
@@ -146,6 +165,11 @@ $result = $stmt->get_result(); // Get result
             padding: 20px 0;
         }
 
+        .status-form {
+            display: flex;
+            gap: 5px;
+        }
+
         /* Footer */
         footer {
             padding: 10px;
@@ -193,12 +217,17 @@ $result = $stmt->get_result(); // Get result
         Below is your scheduled medicine pickup. Please be reminded!
     </div>
 
+    <?php if (isset($message)): ?>
+        <p class="reminder-message"><?= htmlspecialchars($message); ?></p>
+    <?php endif; ?>
+
     <table id="scheduleTable" class="display">
         <thead>
             <tr>
                 <th>Medicine Name</th>
                 <th>Quantity</th>
                 <th>Pickup Date</th>
+                <th>Status</th>
                 <th>Action</th>
             </tr>
         </thead>
@@ -209,14 +238,19 @@ $result = $stmt->get_result(); // Get result
                         <td><?= htmlspecialchars($schedule['name']); ?></td>
                         <td><?= htmlspecialchars($schedule['quantity']); ?></td>
                         <td><?= htmlspecialchars($schedule['pickup_date']); ?></td>
+                        <td><?= htmlspecialchars($schedule['status'] ?? 'Not Picked Up'); ?></td>
                         <td>
-                            <a href="update_schedule.php?schedule_id=<?= $schedule['schedule_id']; ?>" class="update-link">Update</a>
+                            <form action="reminder.php" method="POST" class="status-form">
+                                <input type="hidden" name="schedule_id" value="<?= $schedule['schedule_id']; ?>">
+                                <button type="submit" name="status" value="Picked Up">Picked Up</button>
+                                <button type="submit" name="status" value="Not Picked Up">Not Picked Up</button>
+                            </form>
                         </td>
                     </tr>
                 <?php endwhile; ?>
             <?php else: ?>
                 <tr>
-                    <td colspan="4" class="no-schedule">No schedule has been listed yet. Pick a schedule!</td>
+                    <td colspan="5" class="no-schedule">No schedule has been listed yet. Pick a schedule!</td>
                 </tr>
             <?php endif; ?>
         </tbody>
@@ -227,28 +261,10 @@ $result = $stmt->get_result(); // Get result
     &copy; 2024 MediConnect. All rights reserved.
 </footer>
 
+// Initialize DataTables for the schedule table
 <script>
     $(document).ready(function() {
-        // Initialize DataTable
         $('#scheduleTable').DataTable();
-
-        // SweetAlert2 for Update Link
-        $('.update-link').on('click', function(e) {
-            e.preventDefault();
-            Swal.fire({
-                title: 'Update Schedule?',
-                text: "Are you sure you want to update this schedule?",
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonColor: '#3085d6',
-                cancelButtonColor: '#d33',
-                confirmButtonText: 'Yes, Update!'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    window.location.href = $(this).attr('href'); // Redirect if confirmed
-                }
-            });
-        });
     });
 </script>
 
